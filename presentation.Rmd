@@ -1,0 +1,269 @@
+---
+title: "Suicide Attempts in Shandong, China"
+author: "Braida Carolina - 161879"
+output:
+  ioslides_presentation:
+    incremental: yes
+    count: no
+    html_document: null
+    css: style.css
+  beamer_presentation:
+    incremental: yes
+editor_options:
+  chunk_output_type: inline
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = FALSE, message = FALSE, warning = FALSE)
+```
+
+
+
+```{r echo=FALSE, results='hide'}
+#librerie
+library(ggplot2)
+library(dplyr)
+library(hrbrthemes) #istogramma donne uomini
+library(tidyverse) #relazione lavoro metodo
+library(ggraph) #ospedale lavoro morto
+library(igraph) #ospedale lavoro morto
+library(viridis) #ospedale lavoro morto
+
+#lettura file e set della directory
+setwd("C:/Users/Utente/Desktop/UNI/IBML 1-2/DATA SCIENCE/PROGETTO")
+dati= read.csv("./SuicideChina.csv")
+
+
+#tolgo colonna n perchè inutile
+#creo age rang e assegno val nullo 
+dati <- subset(dati, select = -n)
+dati$Age_range <-NA
+
+
+#assegno alla colonna age_range i nomi della fasce d'età
+x <- dati[, 8]
+fascia <- case_when(
+  x < 19 ~ "teen",
+  between(x,19,30) ~"adult",
+  between(x,31,50) ~"mature",
+  between(x,51,70) ~"pensionable",
+  .default = "old")
+
+dati[,12]<-fascia
+
+
+#controllo che non ci siano doppie chiavi primarie
+
+duplicati <- duplicated(dati$Person_ID)
+if (any(duplicated(dati$Person_ID))) {
+  print("Ci sono valori duplicati nella colonna.")} 
+
+
+# Controllo se ci sono valori NA nel dataset
+colonne_na <- colnames(dati)[apply(dati, 2, function(x) any(is.na(x)))]
+
+if (length(colonne_na) > 0) {
+  cat("Valori NA trovati nelle seguenti colonne:\n")
+  cat(colonne_na, "\n")
+} else {
+  cat("Nessun valore NA trovato nel dataset.\n")
+}
+
+```
+
+
+
+## Cosa contiene il DataSet?
+>* Person_ID: 1, 2, 3, ...
+>* Hospedalized: yes, no
+>* Died: yes, no
+>* Urban: yes, no
+>* Year: 2009, 2010, 2011
+>* Month: 1, 2, ..., 12
+>* Sex: female, male
+>* Age: 1, ..., 100
+>* Education: illiterate, primary, secondary, tertiary, unknow
+>* Occupation: farming, household, professional, student, unemployed, worker, retiree, service, unknow
+>* method: cutting, drowing, hanging, jumping, pesticide, poison unspec, other poison, other
+>* Age_range: teen, adult, mature, pensionable, old
+
+
+
+## La disparità!
+
+<div class="div_imm">
+<img src="bad.jpeg" width="48%" height="280px" class="imm">
+<img src="good.jpg" width="48%" height="280px" class="imm">
+<img src="bad2.jpg" width="48%" height="280px" class="imm">
+<img src="good2.jpg" width="48%" height="280px" class="imm">
+</div>
+
+
+
+## Come questa disparità influisce sui suicidi?
+<p>Analisi dei lavori</p>
+<p>
+```{r echo=FALSE, results='asis'}
+tot_farming <- table(dati$Occupation)["farming"]
+percentuale_farming <- round(100*tot_farming/nrow(dati),2)
+cat(percentuale_farming, "% è la percentuale di contadini presenti nell'intero dataset")
+```
+</p>
+
+
+```{r echo=FALSE, out.width = "980px", out.height = "550px", fig.align='center'}
+
+#grafico a barre diviso per lavori
+ggplot(data = dati, aes(x = Occupation, fill = Occupation)) +
+  geom_bar(show.legend = FALSE) +
+  xlab("Lavoro")+
+  ylab("Count")+
+  scale_fill_manual(values = c("farming"=          "#00BDAE",
+                               "business/service"= "#85D0C6",
+                               "household"=        "#1194A7",
+                               "others/unknown" =  "#6ACDE6",
+                               "professional"=     "#0087BF",
+                               "retiree"=          "#9990BA",
+                               "student"=          "#C77AB5",
+                               "unemployed"=       "#7F4599",
+                               "worker"=           "#691D69"))+
+  theme(panel.background = element_rect(fill='transparent'),
+        panel.grid.major = element_line(color='#DDDDDD'),
+        axis.title = element_text(colour = "#0087BF"))
+```
+
+
+
+## Che altre relazioni ci sono?
+
+<p>Analisi della relazione tra sesso e età</p>
+
+```{r echo=FALSE, out.width = "980px", out.height = "550px", fig.align='center'}
+#creazione dataset uomini e donne selezionando età
+donne=dati%>%
+  filter(Sex=="female")%>%
+  select(Age)
+
+uomini=dati%>%
+  filter(Sex=="male")%>%
+  select(Age)
+
+#grafico di densità speculare sopra donne e sotto uomini in base a quanti tentativi per età
+ggplot(donne, aes(x=x) ) +
+  # Donne
+  geom_density(data = donne, aes(x = Age, y = ..density..), fill = "#C77AB5")+
+  # Uomini
+  geom_density(data = uomini, aes(x = Age, y = -..density..), fill = "#00BDAE")+
+  scale_y_continuous(labels = NULL)+
+  scale_x_continuous(breaks = c(5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100))+
+  theme_ipsum() +
+  xlab("Età")+
+  ylab("Uomini             |           Donne                      ")+
+  theme(panel.background = element_rect(fill='transparent'),
+        panel.grid.major = element_line(color='#DDDDDD'),
+        axis.title = element_text(colour = "#0087BF"))
+
+```
+
+
+
+## Se non è sesso o età, è il periodo dell'anno?
+
+```{r echo=FALSE, out.width = "1020px", out.height = "550px", fig.align='center'}
+#grafico che indica per ogni mese quanti per ogni lavoro hanno fatto il tentativo
+
+ggplot(data = dati, aes(x = Month, fill = Occupation)) +
+  geom_bar()+
+  scale_x_continuous(labels = waiver(), breaks = 1:12, position = "bottom")+
+  xlab("Mese")+
+  ylab("Count")+
+  scale_fill_manual(values = c("worker"=           "#00BDAE",
+                               "business/service"= "#85D0C6",
+                               "household"=        "#1194A7",
+                               "others/unknown" =  "#6ACDE6",
+                               "professional"=     "#0087BF",
+                               "retiree"=          "#9990BA",
+                               "student"=          "#C77AB5",
+                               "unemployed"=       "#7F4599",
+                               "farming"=          "#691D69"))+
+  theme(panel.background = element_rect(fill='transparent'),
+        panel.grid.major = element_line(color='#DDDDDD'),
+        axis.title = element_text(colour = "#0087BF"))
+
+
+```
+
+
+## Relazione lavoro e metodo
+
+<p>Visto che ho capito che il fatto scatentante è il lavoro l'ho voluto relazonare al metodo</p>
+
+```{r echo=FALSE, out.width = "980px", out.height = "630px", fig.align='center'}
+#grafico density 2d che relaziona lavoro e metodo
+x <- dati$method
+y <- dati$Occupation
+
+ggplot(dati, aes(x=x, y=y) ) +
+  geom_bin2d(bins = 70, aes(fill = ..count..)) +
+     scale_fill_gradient(low="#85D0C6", high="#691D69", space ="Lab", guide= "colourbar", aesthetics = c("colour", "fill"), na.value = "red") +
+  xlab("Metodo")+
+  ylab("Lavoro")+
+  theme(panel.background = element_rect(fill='transparent'),
+        panel.grid.major = element_line(color='#DDDDDD'),
+        axis.title = element_text(colour = "#0087BF"))
+
+```
+
+
+
+## C'è relazione tra la morte effettiva e l'ospedale?
+```{r echo=FALSE, out.width = "980px", out.height = "630px", fig.align='center'}
+#density 2d che realziona il trasporto in ospedale e la poi morte effettiva generale
+x <- dati$Died
+y <- dati$Hospitalised
+
+ggplot(dati, aes(x=x, y=y) ) +
+  geom_bin2d(bins = 70, aes(fill = ..count..)) +
+     scale_fill_gradient(low="#85D0C6", high="#691D69", space ="Lab", guide= "colourbar", aesthetics = c("colour", "fill"), na.value = "red") +
+  xlab("Morti")+
+  ylab("Ospedale")+
+  theme(panel.background = element_rect(fill='transparent'),
+        panel.grid.major = element_line(color='#DDDDDD'),
+        axis.title = element_text(colour = "#0087BF"))
+```
+
+
+### E guardando solo i contadini?
+
+```{r echo=FALSE, out.width = "980px", out.height = "630px", fig.align='center'}
+#density 2d che realziona il trasporto in ospedale e la poi morte effettiva dei contadini
+
+#creo dataset farming con valori di morte e ospedale solo di contadini
+morti <- dati%>%
+  filter(Occupation=="farming")%>%
+  select(Died)
+
+ospedale <- dati%>%
+  filter(Occupation=="farming")%>%
+  select(Hospitalised)
+
+farming<-data.frame(morti, ospedale)
+
+#grafico
+x <- farming$Died
+y <- farming$Hospitalised
+
+ggplot(farming, aes(x=x, y=y) ) +
+  geom_bin2d(bins = 70, aes(fill = ..count..)) +
+     scale_fill_gradient(low="#85D0C6", high="#691D69", space ="Lab", guide= "colourbar", aesthetics = c("colour", "fill"), na.value = "red") +
+  xlab("Morti")+
+  ylab("Ospedale")+
+  theme(panel.background = element_rect(fill='transparent'),
+        panel.grid.major = element_line(color='#DDDDDD'),
+        axis.title = element_text(colour = "#0087BF"))
+
+```
+
+
+
